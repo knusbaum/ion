@@ -495,7 +495,7 @@ func (g *generateSeq[T, U]) Lazy(f func(func() T) bool) {
 // accumulator value after `f` has been run over every element of `s`.
 //
 // Note: Running a fold on an unbounded sequence will never terminate.
-// One should usually use Split() or Fold() on unbounded sequences first
+// One should usually use Split() or Take() on unbounded sequences first
 // to limit the output.
 //
 // For example, to sum the first 1000 primes (with imaginary isPrime and sum
@@ -649,8 +649,8 @@ func Filter[T any](s Seq[T], f func(T) bool) Seq[T] {
 
 // ToSlice converts a Seq[T] into a []T.
 //
-// Note: Running a fold on an unbounded sequence will never terminate.
-// One should usually use Split() or Fold() on unbounded sequences first
+// Note: Running ToSlice on an unbounded sequence will never terminate.
+// One should usually use Split() or Take() on unbounded sequences first
 // to limit the output.
 func ToSlice[T any](s Seq[T]) []T {
 	var sl []T
@@ -661,7 +661,7 @@ func ToSlice[T any](s Seq[T]) []T {
 	return sl
 }
 
-// Always takes a function accepting an element T and returns nothing,
+// Always takes a function accepting an element T which returns nothing,
 // and returns a function that does the same thing but always returns true.
 //
 // This is useful for calls to Iterate:
