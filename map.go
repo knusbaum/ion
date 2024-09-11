@@ -381,25 +381,35 @@ func (g *generateSeq[T, U]) Split(n uint64) (Seq[T], Seq[T]) {
 		return g, (*Vec[T])(nil)
 	}
 
-	state := g.state
-	l := BuildVec(func(add func(T)) {
-		for i := uint64(0); i < n; i++ {
-			var e T
-			var cont bool
-			e, state, cont = g.f(state)
-			if !cont {
-				return
-			}
-			add(e)
-		}
-	})
-
-	r := &generateSeq[T, U]{
+	l := &generateSeq[T, U]{
 		f:     g.f,
-		state: state,
-		limit: g.limit - n,
+		state: g.state,
+		limit: n,
 	}
-	return l, r
+
+	// We need to generate the state for the remaining seq
+	state := g.state
+	for i := uint64(0); i < n; i++ {
+		var cont bool
+		_, state, cont = g.f(state)
+		if !cont {
+			// We didn't reach n
+			r := (*Vec[T])(nil)
+			return l, r
+		}
+	}
+
+	var right Seq[T]
+	if g.limit > 0 && n >= g.limit {
+		right = (*Vec[T])(nil)
+	} else {
+		right = &generateSeq[T, U]{
+			f:     g.f,
+			state: state,
+			limit: g.limit - n,
+		}
+	}
+	return l, right
 }
 
 func (g *generateSeq[T, U]) Take(n uint64) Seq[T] {

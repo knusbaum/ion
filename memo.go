@@ -1,6 +1,7 @@
 package ion
 
 import (
+	"math"
 	"sync"
 )
 
@@ -30,57 +31,26 @@ func (m *memo[T]) Elem(i uint64) (T, bool) {
 }
 
 func (m *memo[T]) Split(n uint64) (Seq[T], Seq[T]) {
-	m.m.Lock()
-	defer m.m.Unlock()
-	memlen := m.mems.Len()
+	left := &memoPart[T]{
+		underlying: m,
+		lower:      0,
+		upper:      n,
+	}
+	right := &memoPart[T]{
+		underlying: m,
+		lower:      n,
+		upper:      math.MaxUint64,
+	}
+	return left, right
 
-	var sl, sr Seq[T]
-	if n > memlen {
-		splits := n - m.mems.Len()
-		sl, sr = m.s.Split(splits)
-	} else {
-		sl = (*Vec[T])(nil)
-		sr = m.s
-	}
-	var ml, mr Seq[T]
-	if n >= m.mems.Len() {
-		ml = m.mems
-		mr = (*Vec[T])(nil)
-	} else {
-		ml, mr = m.mems.Split(n)
-	}
-	l := &memo[T]{
-		s:    sl,
-		mems: ml.(*Vec[T]),
-	}
-	r := &memo[T]{
-		s:    sr,
-		mems: mr.(*Vec[T]),
-	}
-	return l, r
 }
 
 func (m *memo[T]) Take(n uint64) Seq[T] {
-	m.m.Lock()
-	defer m.m.Unlock()
-	splits := int64(n) - int64(m.mems.Len())
-	var sl Seq[T]
-	if splits > 0 {
-		sl = m.s.Take(uint64(splits))
-	} else {
-		sl = (*Vec[T])(nil)
+	return &memoPart[T]{
+		underlying: m,
+		lower:      0,
+		upper:      n,
 	}
-	var ml Seq[T]
-	if n >= m.mems.Len() {
-		ml = m.mems
-	} else {
-		ml = m.mems.Take(n)
-	}
-	l := &memo[T]{
-		s:    sl,
-		mems: ml.(*Vec[T]),
-	}
-	return l
 }
 
 func (m *memo[T]) Iterate(f func(T) bool) {
@@ -105,6 +75,86 @@ func (m *memo[T]) Lazy(f func(func() T) bool) {
 		return
 	}
 	m.s.Lazy(f) // TODO: This is a problem, because we're not memoizing the results.
+}
+
+var _ Seq[int] = &memoPart[int]{}
+
+// memoPart is a part of a memo object, used to avoid the need
+// to realize memo elements when doing operations on a memo
+// such as Take and Split.
+//
+// memoPart just keeps offsets into the memo Seq and forwards
+// operations to the underlying memo instance.
+type memoPart[T any] struct {
+	underlying *memo[T]
+	lower      uint64
+	upper      uint64
+}
+
+func (m *memoPart[T]) Elem(n uint64) (T, bool) {
+	if n >= (m.upper - m.lower) {
+		var ret T
+		return ret, false
+	}
+	return m.underlying.Elem(n + m.lower)
+}
+
+func (m *memoPart[T]) Iterate(f func(T) bool) {
+	// TODO: This will only iterate up to math.MaxUint64 elements.
+	for i := m.lower; i < m.upper; i++ {
+		e, ok := m.underlying.Elem(i)
+		if !ok || !f(e) {
+			return
+		}
+	}
+}
+
+func (m *memoPart[T]) Lazy(f func(func() T) bool) {
+	for i := m.lower; i < m.upper; i++ {
+		j := i
+		cont := f(func() T {
+			e, ok := m.underlying.Elem(j)
+			if !ok {
+				// TODO: This shouldn't happen, but indicates
+				// something wrong in the API.
+				var ret T
+				return ret
+			}
+			return e
+		})
+		if !cont {
+			return
+		}
+	}
+}
+
+func (m *memoPart[T]) Split(n uint64) (Seq[T], Seq[T]) {
+	if n > m.upper-m.lower {
+		return m, (*Vec[T])(nil)
+	}
+	left := &memoPart[T]{
+		underlying: m.underlying,
+		lower:      m.lower,
+		upper:      m.lower + n,
+	}
+	right := &memoPart[T]{
+		underlying: m.underlying,
+		lower:      m.lower + n,
+		upper:      m.upper,
+	}
+	return left, right
+}
+
+func (m *memoPart[T]) Take(n uint64) Seq[T] {
+	if n > m.upper-m.lower {
+		return m
+	}
+	left := &memoPart[T]{
+		underlying: m.underlying,
+		lower:      m.lower,
+		upper:      m.lower + n,
+	}
+	return left
 }
 
 // Memo takes a Seq[T] `s` and returns a new memoized Seq[T] which is identical,

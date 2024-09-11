@@ -193,7 +193,7 @@ func testFinSeq(t *testing.T, s Seq[int]) {
 			return acc + i
 		})
 		if ret != 49995000 {
-			t.Fatalf("Expected ret == 4950, but got %d\n", ret)
+			t.Fatalf("Expected ret == 49995000, but got %d\n", ret)
 		}
 		ret = Fold(r, func(acc, i int) int {
 			return acc + i
@@ -319,7 +319,6 @@ func testFinSeq(t *testing.T, s Seq[int]) {
 	t.Run("take", func(t *testing.T) {
 		for j := 0; j < 2; j++ {
 			l := s.Take(200000)
-
 			var s int
 			// Make sure l contains what we expect
 			res := Fold(l, func(acc, i int) int {
